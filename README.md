@@ -147,7 +147,7 @@ docker-compose up --build
 ├────┬────────────────┤         ├────┬────────────────┤         ├────┬────────────────┤
 │ PK │ AuthorId       │         │ PK │ BookId         │         │ PK │ ReaderId       │
 ├────┼────────────────┤         ├────┼────────────────┤         ├────┼────────────────┤
-│    │ FirstName      │◄──1:N──│ FK │ AuthorId       │         │    │ FirstName      │
+│    │ FirstName      │◄──1:N───│ FK │ AuthorId       │         │    │ FirstName      │
 │    │ LastName       │         │    │ Title          │         │    │ LastName       │
 │    │ BirthDate      │         │    │ ISBN (UNIQUE)  │         │    │ ClassNumber    │
 └────┴────┬───────────┘         └────┴─────┬──────────┘         └────┴─────┬──────────┘
