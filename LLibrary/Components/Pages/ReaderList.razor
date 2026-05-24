@@ -1,0 +1,198 @@
+﻿@page "/readers"
+@rendermode InteractiveServer
+@using LLibrary.Data
+@using LLibrary.Models
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<LibraryContext> DbFactory
+
+<PageTitle>Читатели библиотеки</PageTitle>
+
+<div class="mb-3">
+    <a href="/" class="btn btn-outline-secondary btn-sm shadow-sm text-decoration-none">⬅ На главную</a>
+</div>
+
+<div class="container mt-4">
+    <h3 class="mb-4 text-success">👥 Читатели библиотеки</h3>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+            <strong>⚠️ Ошибка:</strong> @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = string.Empty" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+            <strong>✅ Успех:</strong> @successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = string.Empty" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- Форма регистрации -->
+    <div class="card mb-4 shadow-sm border-success">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0 card-title">➕ Регистрация нового читателя</h5>
+        </div>
+        <div class="card-body">
+            <EditForm Model="@newReader" OnValidSubmit="HandleValidSubmit" FormName="AddReaderForm">
+                <DataAnnotationsValidator />
+                <ValidationSummary class="text-danger small" />
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label font-weight-bold">Имя</label>
+                        <InputText @bind-Value="newReader.FirstName" class="form-control" placeholder="Например: Иван" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label font-weight-bold">Фамилия</label>
+                        <InputText @bind-Value="newReader.LastName" class="form-control" placeholder="Например: Иванов" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label font-weight-bold">Класс / Статус</label>
+                        <InputText @bind-Value="newReader.ClassNumber" class="form-control" placeholder="Например: 10-А" />
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-success w-100">Добавить</button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+
+    <!-- Таблица читателей -->
+    <table class="table table-hover table-bordered shadow-sm">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>Имя</th>
+                <th>Фамилия</th>
+                <th>Класс</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (readers != null)
+            {
+                @foreach (var reader in readers)
+                {
+                    <tr>
+                        @if (editingReaderId == reader.ReaderId)
+                        {
+                            <td>@reader.ReaderId</td>
+                            <td><input @bind="editReader.FirstName" class="form-control form-control-sm" /></td>
+                            <td><input @bind="editReader.LastName" class="form-control form-control-sm" /></td>
+                            <td><input @bind="editReader.ClassNumber" class="form-control form-control-sm" /></td>
+                            <td>
+                                <button class="btn btn-sm btn-success shadow-sm" @onclick="SaveEdit">💾 Сохранить</button>
+                                <button class="btn btn-sm btn-secondary shadow-sm" @onclick="CancelEdit">Отмена</button>
+                            </td>
+                        }
+                        else
+                        {
+                            <td>@reader.ReaderId</td>
+                            <td>@reader.FirstName</td>
+                            <td>@reader.LastName</td>
+                            <td><span class="badge bg-light text-dark border">@reader.ClassNumber</span></td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => StartEdit(reader)">✏️ Править</button>
+                                <button class="btn btn-sm btn-danger" @onclick="() => DeleteReader(reader.ReaderId)">Удалить</button>
+                            </td>
+                        }
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<Reader>? readers;
+    private int editingReaderId = 0;
+    private Reader newReader = new Reader();
+    private Reader editReader = new Reader();
+    private string errorMessage = "";
+    private string successMessage = "";
+
+    protected override async Task OnInitializedAsync() => await LoadReaders();
+
+    private async Task LoadReaders()
+    {
+        using var context = DbFactory.CreateDbContext();
+        readers = await context.Readers.ToListAsync();
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(newReader.FirstName) || string.IsNullOrWhiteSpace(newReader.LastName))
+            {
+                errorMessage = "Имя и Фамилия обязательны!";
+                return;
+            }
+            using var context = DbFactory.CreateDbContext();
+            context.Readers.Add(newReader);
+            await context.SaveChangesAsync();
+            successMessage = $"Читатель {newReader.FirstName} {newReader.LastName} добавлен!";
+            errorMessage = "";
+            newReader = new Reader();
+            await LoadReaders();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Не удалось добавить: {ex.Message}";
+        }
+    }
+
+    private void StartEdit(Reader reader)
+    {
+        editingReaderId = reader.ReaderId;
+        editReader = new Reader { ReaderId = reader.ReaderId, FirstName = reader.FirstName, LastName = reader.LastName, ClassNumber = reader.ClassNumber };
+    }
+
+    private void CancelEdit() => editingReaderId = 0;
+
+    private async Task SaveEdit()
+    {
+        try
+        {
+            using var context = DbFactory.CreateDbContext();
+            var reader = await context.Readers.FindAsync(editingReaderId);
+            if (reader != null)
+            {
+                reader.FirstName = editReader.FirstName;
+                reader.LastName = editReader.LastName;
+                reader.ClassNumber = editReader.ClassNumber;
+                await context.SaveChangesAsync();
+                editingReaderId = 0;
+                await LoadReaders();
+                successMessage = "Изменения сохранены.";
+            }
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+    }
+
+    private async Task DeleteReader(int readerId)
+    {
+        try
+        {
+            using var context = DbFactory.CreateDbContext();
+            var hasHistory = await context.BookMovements.AnyAsync(m => m.ReaderId == readerId);
+            if (hasHistory)
+            {
+                errorMessage = "Нельзя удалить читателя, пока за ним числятся записи в журнале выдачи!";
+                return;
+            }
+            var reader = await context.Readers.FindAsync(readerId);
+            if (reader != null)
+            {
+                context.Readers.Remove(reader);
+                await context.SaveChangesAsync();
+                await LoadReaders();
+                successMessage = "Читатель удален.";
+            }
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+    }
+}

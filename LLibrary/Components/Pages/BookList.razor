@@ -1,0 +1,199 @@
+﻿@page "/books"
+@rendermode InteractiveServer
+@using LLibrary.Data
+@using LLibrary.Models
+@using Microsoft.EntityFrameworkCore
+@using FluentValidation
+@inject IDbContextFactory<LibraryContext> DbFactory
+@inject IValidator<Book> BookValidator
+
+<PageTitle>Фонд книг</PageTitle>
+
+<div class="mb-3">
+    <a href="/" class="btn btn-outline-secondary btn-sm shadow-sm text-decoration-none">⬅ На главную</a>
+</div>
+
+<div class="container mt-4">
+    <h3 class="mb-4 text-primary">📚 Книжный фонд школы</h3>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+            <strong>⚠️ Ошибка:</strong> @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = string.Empty"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+            <strong>✅ Успех:</strong> @successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = string.Empty"></button>
+        </div>
+    }
+
+    <!-- Форма добавления книги -->
+    <div class="card mb-4 shadow-sm border-primary">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0 card-title">➕ Добавить новую книгу</h5>
+        </div>
+        <div class="card-body">
+            @if (authors == null)
+            {
+                <p>Загрузка списка авторов...</p>
+            }
+            else
+            {
+                <EditForm Model="@newBook" OnValidSubmit="AddBook">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label font-weight-bold">Название книги</label>
+                            <InputText @bind-Value="newBook.Title" class="form-control" placeholder="Например: Война и мир" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label font-weight-bold">Автор</label>
+                            <InputSelect @bind-Value="newBook.AuthorId" class="form-select">
+                                <option value="0">-- Выберите автора --</option>
+                                @foreach (var author in authors)
+                                {
+                                    <option value="@author.AuthorId">@author.FullName</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label font-weight-bold">ISBN (штрихкод)</label>
+                            <InputText @bind-Value="newBook.ISBN" class="form-control" placeholder="123-456-789" />
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="button" class="btn btn-primary w-100" @onclick="AddBook">
+                                Добавить
+                            </button>
+                        </div>
+                    </div>
+                </EditForm>
+            }
+        </div>
+    </div>
+
+    <!-- Таблица книг -->
+    @if (books == null)
+    {
+        <div class="d-flex align-items-center">
+            <strong>Загрузка данных из библиотеки...</strong>
+            <div class="spinner-border ms-auto" role="status" aria-hidden="true"></div>
+        </div>
+    }
+    else if (!books.Any())
+    {
+        <div class="alert alert-warning" role="alert">В базе данных пока нет ни одной книги.</div>
+    }
+    else
+    {
+        <table class="table table-hover table-bordered shadow-sm align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>Название книги</th>
+                    <th>Автор</th>
+                    <th>ISBN</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var book in books)
+                {
+                    <tr>
+                        <td>@book.BookId</td>
+                        <td><strong>@book.Title</strong></td>
+                        <td>@(book.Author?.FullName ?? "Автор не указан")</td>
+                        <td><span class="badge bg-secondary">@book.ISBN</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-danger shadow-sm" @onclick="() => DeleteBook(book.BookId)">
+                                🗑️ Удалить
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private List<Book>? books;
+    private List<Author>? authors;
+    private Book newBook = new Book();
+    private string successMessage = "";
+    private string errorMessage = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        using var context = DbFactory.CreateDbContext();
+        books = await context.Books.Include(b => b.Author).OrderByDescending(b => b.BookId).ToListAsync();
+        var authorsFromDb = await context.Authors.ToListAsync();
+        authors = authorsFromDb.OrderBy(a => a.FullName).ToList();
+    }
+
+    private async Task AddBook()
+    {
+        try
+        {
+            // 1. ЗАПУСКАЕМ FLUENT VALIDATION
+            var validationResult = await BookValidator.ValidateAsync(newBook);
+
+            // 2. ЕСЛИ ЕСТЬ ОШИБКИ — ПОКАЗЫВАЕМ ИХ И ВЫХОДИМ
+            if (!validationResult.IsValid)
+            {
+                // Собираем все ошибки в одну строку через запятую
+                errorMessage = string.Join(", ", validationResult.Errors.Select(e => e.ErrorMessage));
+                return;
+            }
+
+            // 3. ЕСЛИ ВСЕ ХОРОШО — СОХРАНЯЕМ В БАЗУ
+            using var context = DbFactory.CreateDbContext();
+            context.Books.Add(newBook);
+            await context.SaveChangesAsync();
+
+            successMessage = $"Книга «{newBook.Title}» успешно добавлена в фонд!";
+            errorMessage = "";
+            newBook = new Book();
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Ошибка при добавлении книги: {ex.Message}";
+        }
+    }
+
+    private async Task DeleteBook(int bookId)
+    {
+        try
+        {
+            using var context = DbFactory.CreateDbContext();
+            var isBookInUse = await context.BookMovements.AnyAsync(m => m.BookId == bookId && !m.IsReturned);
+            if (isBookInUse)
+            {
+                errorMessage = "Нельзя удалить книгу, которая сейчас выдана читателю!";
+                return;
+            }
+            var bookToDelete = await context.Books.FindAsync(bookId);
+            if (bookToDelete != null)
+            {
+                context.Books.Remove(bookToDelete);
+                await context.SaveChangesAsync();
+                successMessage = "Книга списана и удалена из базы!";
+                errorMessage = "";
+                await LoadData();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Не удалось удалить книгу: {ex.Message}";
+        }
+    }
+}

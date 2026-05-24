@@ -1,0 +1,75 @@
+﻿@page "/add-book"
+@rendermode InteractiveServer
+@using LLibrary.Models
+@using LLibrary.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<LibraryContext> DbFactory
+@inject NavigationManager Navigation
+
+<PageTitle>Добавить книгу</PageTitle>
+
+<h1>Новая книга</h1>
+
+@if (_errorMessage != null)
+{
+    <div class="alert alert-danger">@_errorMessage</div>
+}
+
+<div class="row">
+    <div class="col-md-6">
+        <EditForm Model="@_newBook" OnValidSubmit="@HandleSubmit">
+            <DataAnnotationsValidator />
+
+            <div class="mb-3">
+                <label class="form-label">Название:</label>
+                <InputText @bind-Value="_newBook.Title" class="form-control" />
+                <ValidationMessage For="@(() => _newBook.Title)" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">ISBN:</label>
+                <InputText @bind-Value="_newBook.ISBN" class="form-control" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">ID Автора:</label>
+                <InputNumber @bind-Value="_newBook.AuthorId" class="form-control" />
+                <small class="text-muted">Введите ID автора (1 - Толстой, 2 - Достоевский)</small>
+                <ValidationMessage For="@(() => _newBook.AuthorId)" />
+            </div>
+
+            <button type="submit" class="btn btn-success">Сохранить</button>
+            <a href="/" class="btn btn-secondary ms-2">Отмена</a>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private Book _newBook = new Book();
+    private string? _errorMessage;
+
+    private async Task HandleSubmit()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_newBook.Title) || _newBook.AuthorId == 0)
+            {
+                _errorMessage = "Заполните название и выберите автора!";
+                return;
+            }
+
+            // Используем DbContextFactory для создания контекста
+            using var context = DbFactory.CreateDbContext();
+
+            context.Books.Add(_newBook);
+            await context.SaveChangesAsync();
+
+            // Перенаправляем на главную страницу
+            Navigation.NavigateTo("/");
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Ошибка при добавлении книги: {ex.Message}";
+        }
+    }
+}

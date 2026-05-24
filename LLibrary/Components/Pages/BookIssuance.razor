@@ -1,0 +1,217 @@
+﻿@page "/issuance"
+@rendermode InteractiveServer
+@using LLibrary.Data
+@using LLibrary.Models
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<LibraryContext> DbFactory
+
+<PageTitle>Выдача и возврат книг</PageTitle>
+
+<div class="mb-3">
+    <a href="/" class="btn btn-outline-secondary btn-sm shadow-sm text-decoration-none">⬅ На главную</a>
+</div>
+
+<div class="container mt-4">
+    <h3 class="mb-4 text-primary">📖 Учет выдачи и возврата книг</h3>
+
+    <!-- Форма выдачи -->
+    <div class="card mb-4 shadow-sm border-primary">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0 card-title">✍️ Оформить новую выдачу</h5>
+        </div>
+        <div class="card-body">
+            @if (books == null || readers == null)
+            {
+                <div class="d-flex align-items-center">
+                    <strong>Загрузка списков...</strong>
+                    <div class="spinner-border text-primary ms-auto" role="status" aria-hidden="true"></div>
+                </div>
+            }
+            else
+            {
+                <div class="row g-3">
+                    <div class="col-md-5">
+                        <label class="form-label font-weight-bold">Выберите книгу</label>
+                        <select class="form-select" @bind="selectedBookId">
+                            <option value="0">-- Выберите книгу --</option>
+                            @foreach (var book in books)
+                            {
+                                <option value="@book.BookId">@book.Title (@(book.Author?.FullName ?? "Нет автора"))</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label font-weight-bold">Выберите читателя</label>
+                        <select class="form-select" @bind="selectedReaderId">
+                            <option value="0">-- Выберите читателя --</option>
+                            @foreach (var reader in readers)
+                            {
+                                <option value="@reader.ReaderId">@reader.FullName (@reader.ClassNumber)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button class="btn btn-primary w-100 shadow-sm" @onclick="IssueBook" disabled="@(selectedBookId == 0 || selectedReaderId == 0)">
+                            Выдать
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+            @successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = string.Empty"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+            @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = string.Empty"></button>
+        </div>
+    }
+
+    <!-- Журнал операций -->
+    <h4 class="mb-3 text-secondary">📋 Журнал операций библиотеки</h4>
+    @if (movements == null)
+    {
+        <p><em>Загрузка журнала...</em></p>
+    }
+    else if (!movements.Any())
+    {
+        <div class="alert alert-light border text-center">Журнал пока пуст.</div>
+    }
+    else
+    {
+        <table class="table table-striped table-bordered shadow-sm align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>Книга</th>
+                    <th>Читатель</th>
+                    <th>Дата операции</th>
+                    <th>Статус</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var move in movements)
+                {
+                    <tr>
+                        <td>@move.MovementId</td>
+                        <td><strong>@move.Book?.Title</strong></td>
+                        <td>@(move.Reader?.FullName ?? "Не указан")</td>
+                        <td>@move.ActionDate.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                        <td>
+                            @if (move.IsReturned)
+                            {
+                                <span class="badge bg-success">Возвращена</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-warning text-dark">На руках</span>
+                            }
+                        </td>
+                        <td>
+                            <div class="d-flex gap-2">
+                                @if (!move.IsReturned)
+                                {
+                                    <button class="btn btn-sm btn-success shadow-sm" @onclick="() => ReturnBook(move.MovementId)">Вернуть</button>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small align-self-center me-2">Закрыто</span>
+                                }
+                                <button class="btn btn-sm btn-outline-danger shadow-sm" @onclick="() => DeleteMovement(move.MovementId)">🗑️ Удалить</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private List<Book>? books;
+    private List<Reader>? readers;
+    private List<BookMovement>? movements;
+    private int selectedBookId = 0;
+    private int selectedReaderId = 0;
+    private string successMessage = "";
+    private string errorMessage = "";
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        using var context = DbFactory.CreateDbContext();
+        books = await context.Books.Include(b => b.Author).ToListAsync();
+        readers = await context.Readers.ToListAsync();
+        movements = await context.BookMovements.Include(m => m.Book).Include(m => m.Reader).OrderByDescending(m => m.ActionDate).ToListAsync();
+    }
+
+    private async Task IssueBook()
+    {
+        try
+        {
+            if (selectedBookId == 0 || selectedReaderId == 0) return;
+            using var context = DbFactory.CreateDbContext();
+
+            // Проверка: не выдана ли книга уже
+            var isAlreadyIssued = await context.BookMovements.AnyAsync(m => m.BookId == selectedBookId && !m.IsReturned);
+            if (isAlreadyIssued)
+            {
+                errorMessage = "Эта книга уже выдана другому читателю и не возвращена!";
+                return;
+            }
+
+            var newMovement = new BookMovement { BookId = selectedBookId, ReaderId = selectedReaderId, ActionDate = DateTime.UtcNow, IsReturned = false };
+            context.BookMovements.Add(newMovement);
+            await context.SaveChangesAsync();
+            successMessage = "Книга успешно выдана!";
+            selectedBookId = 0; selectedReaderId = 0;
+            await LoadData();
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+    }
+
+    private async Task ReturnBook(int movementId)
+    {
+        try
+        {
+            using var context = DbFactory.CreateDbContext();
+            var movement = await context.BookMovements.FindAsync(movementId);
+            if (movement != null)
+            {
+                movement.IsReturned = true;
+                await context.SaveChangesAsync();
+                successMessage = "Книга успешно возвращена!";
+                await LoadData();
+            }
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+    }
+
+    private async Task DeleteMovement(int movementId)
+    {
+        try
+        {
+            using var context = DbFactory.CreateDbContext();
+            var movement = await context.BookMovements.FindAsync(movementId);
+            if (movement != null)
+            {
+                context.BookMovements.Remove(movement);
+                await context.SaveChangesAsync();
+                successMessage = "Запись успешно удалена из журнала!";
+                await LoadData();
+            }
+        }
+        catch (Exception ex) { errorMessage = ex.Message; }
+    }
+}

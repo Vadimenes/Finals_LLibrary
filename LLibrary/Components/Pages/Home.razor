@@ -1,0 +1,181 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@using LLibrary.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<LibraryContext> DbFactory
+@inject NavigationManager NavManager
+
+<PageTitle>Главная - Школьная Библиотека</PageTitle>
+
+<div class="welcome-container">
+    <!-- Шапка -->
+    <div class="hero-section shadow-lg text-white">
+        <div class="hero-overlay"></div>
+        <div class="hero-content">
+            <h1 class="display-3 fw-bold mb-3">Школьная Библиотека</h1>
+            <p class="lead mb-4 fs-4">Добро пожаловать в систему управления книжным фондом и учета читателей.</p>
+
+            <!-- Статистика -->
+            <div class="d-flex justify-content-center gap-3 flex-wrap">
+                <div class="badge bg-light text-dark px-3 py-2 rounded-pill shadow-sm">
+                    📚 Книг: @totalBooks
+                </div>
+                <div class="badge bg-light text-dark px-3 py-2 rounded-pill shadow-sm">
+                    👥 Читателей: @totalReaders
+                </div>
+                <div class="badge bg-warning text-dark px-3 py-2 rounded-pill shadow-sm">
+                    ⏳ Выдано: @booksOnHand
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Карточки навигации -->
+    <div class="container mt-5">
+        <div class="row g-4 justify-content-center">
+
+            <!-- Карточка 1: Фонд книг -->
+            <div class="col-md-4">
+                <a href="/books" class="nav-card shadow-sm border-0 h-100 text-decoration-none text-dark d-block">
+                    <div class="card-body text-center p-5">
+                        <div class="icon-circle bg-primary-soft mb-4">
+                            <span class="fs-1">📚</span>
+                        </div>
+                        <h3 class="fw-bold mb-2">Фонд книг</h3>
+                        <p class="text-muted">Просмотр каталога, добавление новых книг и списание устаревших экземпляров.</p>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Карточка 2: Читатели -->
+            <div class="col-md-4">
+                <a href="/readers" class="nav-card shadow-sm border-0 h-100 text-decoration-none text-dark d-block">
+                    <div class="card-body text-center p-5">
+                        <div class="icon-circle bg-success-soft mb-4">
+                            <span class="fs-1">👥</span>
+                        </div>
+                        <h3 class="fw-bold mb-2">Читатели</h3>
+                        <p class="text-muted">Регистрация новых учеников, редактирование данных и управление базой читателей.</p>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Карточка 3: Журнал выдачи -->
+            <div class="col-md-4">
+                <a href="/issuance" class="nav-card shadow-sm border-0 h-100 text-decoration-none text-dark d-block">
+                    <div class="card-body text-center p-5">
+                        <div class="icon-circle bg-warning-soft mb-4">
+                            <span class="fs-1">📖</span>
+                        </div>
+                        <h3 class="fw-bold mb-2">Журнал выдачи</h3>
+                        <p class="text-muted">Учет выданных книг, фиксация возвратов и просмотр истории операций библиотеки.</p>
+                    </div>
+                </a>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Стили для красивой картинки и карточек -->
+<style>
+    /* Фон для шапки */
+    .hero-section {
+        position: relative;
+        background: url('https://i.pinimg.com/originals/02/86/d0/0286d0d6dbe3e5d2ccd05599edd528cf.jpg') no-repeat center center;
+        background-size: cover;
+        height: 400px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        border-radius: 0 0 50px 50px;
+        overflow: hidden;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+
+    /* Затемнение фона */
+    .hero-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg, rgba(0, 80, 136, 0.9) 0%, rgba(17, 202, 160, 0.8) 100%);
+        z-index: 1;
+    }
+
+    .hero-content {
+        position: relative;
+        z-index: 2;
+        max-width: 800px;
+        padding: 20px;
+    }
+
+    /* Стили карточек */
+    .nav-card {
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border-radius: 20px;
+        background: #fff;
+        height: 100%;
+    }
+
+        .nav-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.15) !important;
+            background: #f8f9fa;
+        }
+
+    /* Круги для иконок */
+    .icon-circle {
+        width: 90px;
+        height: 90px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+    }
+
+    .bg-primary-soft {
+        background-color: rgba(13, 110, 253, 0.1);
+        color: #0d6efd;
+    }
+
+    .bg-success-soft {
+        background-color: rgba(25, 135, 84, 0.1);
+        color: #198754;
+    }
+
+    .bg-warning-soft {
+        background-color: rgba(255, 193, 7, 0.1);
+        color: #ffc107;
+    }
+
+    .welcome-container {
+        background-color: #f4f7f6;
+        min-height: 100vh;
+        padding-bottom: 50px;
+    }
+</style>
+
+@code {
+    private int totalBooks;
+    private int totalReaders;
+    private int booksOnHand;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+
+        // Подсчет общего количества книг
+        totalBooks = await context.Books.CountAsync();
+
+        // Подсчет общего количества читателей
+        totalReaders = await context.Readers.CountAsync();
+
+        // Подсчет книг, которые сейчас на руках (не возвращены)
+        booksOnHand = await context.BookMovements.CountAsync(m => m.IsReturned == false);
+    }
+}

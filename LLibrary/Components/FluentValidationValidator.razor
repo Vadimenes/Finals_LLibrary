@@ -1,0 +1,42 @@
+﻿@using FluentValidation
+@using Microsoft.AspNetCore.Components.Forms
+
+<CascadingValue Value="this">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private ValidationMessageStore? _messageStore;
+    private EditContext? _editContext;
+
+    public void Initialize(EditContext editContext)
+    {
+        _editContext = editContext;
+        _messageStore = new ValidationMessageStore(_editContext);
+    }
+
+    public void DisplayErrors(Dictionary<string, List<string>> errors)
+    {
+        if (_messageStore == null) return;
+
+        _messageStore.Clear();
+
+        foreach (var error in errors)
+        {
+            var fieldIdentifier = new FieldIdentifier(_editContext!.Model, error.Key);
+            _messageStore.Add(fieldIdentifier, error.Value);
+        }
+
+        _editContext?.NotifyValidationStateChanged();
+    }
+
+    public void ClearErrors()
+    {
+        _messageStore?.Clear();
+        _editContext?.NotifyValidationStateChanged();
+    }
+
+    // УДАЛИЛИ МЕТОД Dispose(), так как ValidationMessageStore не требует его
+}
